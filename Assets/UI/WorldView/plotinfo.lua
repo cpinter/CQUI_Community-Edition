@@ -44,6 +44,9 @@ local CQUI_WorkIconAlpha = .60;
 local CQUI_SmartWorkIcon: boolean = true;
 local CQUI_SmartWorkIconSize: number = 64;
 local CQUI_SmartWorkIconAlpha = .45;
+-- local CQUI_PurchaseMouseButtonStatus :number = 0; -- @cpinter: Prevent accidental tile purchases by excluding dragging (0:none, 1:pressed, 2:dragged)
+local CQUI_isMouseDragging  :boolean = false; -- @cpinter: Was LMB clicked inside the plot purchase button, and has not been released yet?
+local CQUI_hasMouseDragged  :boolean = false; -- @cpinter: Has there been any movements since CQUI_isMouseDragging became true?
 
 function CQUI_OnSettingsUpdate()
   CQUI_WorkIconSize = GameConfiguration.GetValue("CQUI_WorkIconSize");
@@ -84,8 +87,104 @@ function OnClickSwapTile( plotId:number )
   return true;
 end
 
+-- -- ===========================================================================
+-- function CQUI_OnPurchasePlotInputHandler( pInputStruct:table )
+  -- print("ZZZ CQUI_OnPurchasePlotInputHandler")
+  -- -- Get event type
+  -- local msg = pInputStruct:GetMessageType( );
+
+  -- -- Enable drag on LMB down
+  -- if msg == MouseEvents.LButtonDown then
+    -- CQUI_isMouseDragging = true; -- Potential drag is in process
+    -- CQUI_hasMouseDragged = false; -- There has been no actual dragging yet
+    -- return true; -- Consume event
+
+  -- -- Disable drag on LMB up (but only if mouse was previously dragging)
+  -- elseif msg == MouseEvents.LButtonUp and CQUI_isMouseDragging then
+    -- CQUI_isMouseDragging = false;
+
+    -- -- In case of no actual drag occurring, purchase plot
+    -- if not CQUI_hasMouseDragged then
+      -- local isUsingDistrictPlacementFilter :boolean = (UI.GetInterfaceMode() == InterfaceModeTypes.DISTRICT_PLACEMENT);
+      -- local isUsingBuildingPlacementFilter :boolean = (UI.GetInterfaceMode() == InterfaceModeTypes.BUILDING_PLACEMENT);
+      -- local kPlot :table = Map.GetPlotByIndex(plotId);
+
+      -- local tParameters = {};
+      -- tParameters[CityCommandTypes.PARAM_PLOT_PURCHASE] = UI.GetInterfaceModeParameter(CityCommandTypes.PARAM_PLOT_PURCHASE);
+      -- tParameters[CityCommandTypes.PARAM_X] = kPlot:GetX();
+      -- tParameters[CityCommandTypes.PARAM_Y] = kPlot:GetY();
+
+      -- local pSelectedCity = UI.GetHeadSelectedCity();
+      -- if pSelectedCity ~= nil then
+        -- if (CityManager.CanStartCommand( pSelectedCity, CityCommandTypes.PURCHASE, tParameters)) then
+          -- CityManager.RequestCommand( pSelectedCity, CityCommandTypes.PURCHASE, tParameters);
+          -- UI.PlaySound("Purchase_Tile");
+        -- end
+      -- else
+        -- if not isUsingDistrictPlacementFilter and not isUsingBuildingPlacementFilter then
+          -- UI.SetInterfaceMode(InterfaceModeTypes.SELECTION);
+        -- end
+      -- end
+
+      -- -- NOTE: Plot changes may not have occured yet; so if staying in this mode
+      -- --     after a plot puchase (e.g., buying plot for district placement)
+      -- --     you must wait for the event raised from the gamecore before figuring
+      -- --     out which plots need a display.
+
+      -- OnClickCitizen();    -- CQUI update selected city citizens and data
+      -- return true;
+    -- end
+
+  -- -- Move camera if dragging, mouse moves, and mouse is over minimap.
+  -- elseif msg == MouseEvents.MouseMove and CQUI_isMouseDragging then
+    -- CQUI_hasMouseDragged = true;
+    -- return true
+  -- end
+
+  -- return false;
+-- end
+
 -- ===========================================================================
-function OnClickPurchasePlot( plotId:number )
+function CQUI_OnPressPurchasePlot( plotId:number )
+  print("ZZZ 1 Press");
+  -- CQUI_PurchaseMouseButtonDown = 1;
+  -- return true;
+  return false;
+end
+
+-- ===========================================================================
+function CQUI_OnMovePurchasePlot( plotId:number )
+  print("ZZZ 2 Drag");
+  -- CQUI_PurchaseMouseButtonDown = 2;
+  return true;
+end
+
+-- ===========================================================================
+function CQUI_OnDragPurchasePlot( plotId:number )
+  print("ZZZ New Drag");
+  -- CQUI_PurchaseMouseButtonDown = 2;
+  CQUI_hasMouseDragged = true
+  return true;
+end
+
+-- ===========================================================================
+function CQUI_OnExitPurchasePlot( plotId:number )
+  print("ZZZ Exit");
+  -- CQUI_PurchaseMouseButtonDown = 2;
+  CQUI_hasMouseDragged = true
+  return true;
+end
+
+-- ===========================================================================
+function CQUI_OnReleasePurchasePlot( plotId:number )
+  if CQUI_hasMouseDragged then
+    print("ZZZ Cancel purchase");
+    CQUI_hasMouseDragged = false
+    -- CQUI_PurchaseMouseButtonDown = 0
+    -- return true; -- @cpinter: Do nothing if mouse was dragging
+    return false;
+    end
+  print("ZZZ Purchase");
 
   local isUsingDistrictPlacementFilter :boolean = (UI.GetInterfaceMode() == InterfaceModeTypes.DISTRICT_PLACEMENT);
   local isUsingBuildingPlacementFilter :boolean = (UI.GetInterfaceMode() == InterfaceModeTypes.BUILDING_PLACEMENT);
@@ -109,12 +208,14 @@ function OnClickPurchasePlot( plotId:number )
   end
 
   -- NOTE: Plot changes may not have occured yet; so if staying in this mode
-  --     after a plot puchase (e.g., buying plot for district placement)
-  --     you must wait for the event raised from the gamecore before figuring
-  --     out which plots need a display.
+      -- after a plot puchase (e.g., buying plot for district placement)
+      -- you must wait for the event raised from the gamecore before figuring
+      -- out which plots need a display.
 
   OnClickCitizen();    -- CQUI update selected city citizens and data
-  return true;
+  CQUI_isMouseDragging = false;
+  -- return true;
+  return false;
 end
 
 -- ===========================================================================
@@ -201,7 +302,15 @@ function ShowPurchases()
           else
             pInstance.PurchaseButton:GetTextControl():SetColorByName("ResGoldLabelCS");
           end
-          pInstance.PurchaseButton:RegisterCallback( Mouse.eLClick, function() OnClickPurchasePlot( index ); end );
+          -- pInstance:SetInputHandler( CQUI_OnPurchasePlotInputHandler, true );
+          -- pInstance.PurchaseButton:SetInputHandler( function() CQUI_OnPurchasePlotInputHandler( index ); end, true );
+          -- pInstance.PurchaseButton:SetInputHandler( CQUI_OnPurchasePlotInputHandler, true );
+          -- pInstance.PurchaseButton:RegisterCallback( MouseEvents.LButtonUp, function() CQUI_OnReleasePurchasePlot( index ); end );
+          -- pInstance.PurchaseButton:RegisterCallback( Mouse.eDrag, function() CQUI_OnDragPurchasePlot( index ); end );
+          -- pInstance.PurchaseButton:RegisterCallback( Mouse.MouseMove, function() CQUI_OnMovePurchasePlot( index ); end );
+          -- pInstance.PurchaseButton:RegisterCallback( Mouse.eLClick, function() CQUI_OnReleasePurchasePlot( index ); end );
+          -- pInstance.PurchaseButton:RegisterCallback( Mouse.eMouseExit, function() CQUI_OnExitPurchasePlot( index ); end );
+          -- pInstance.PurchaseButton:RegisterCallback( Mouse.LButtonDown, function() CQUI_OnPressPurchasePlot( index ); end );
           pInstance.PurchaseAnim:SetColor( (goldCost > playerGold ) and 0xbb808080 or 0xffffffff ) ;
           pInstance.PurchaseAnim:RegisterEndCallback( OnSpinningCoinAnimDone );
           if (goldCost > playerGold ) then
@@ -577,7 +686,7 @@ function HidePurchases()
   for _,pInstance in ipairs(m_uiPurchase) do
     pInstance.PurchaseButton:SetHide( true );
     pInstance.CQUI_NextPlotButton:SetHide( true );
-    -- NOTE: This plot can't be returned to the instnace manager
+    -- NOTE: This plot can't be returned to the instance manager
     -- (ReleaseInstance) unless the local cached version in (m_uiWorldMap)
     -- is removed too; which is only safe if NOTHING else utilizing this
     -- plot info instance.
@@ -938,10 +1047,62 @@ function KeyHandler( key:number )
   end
   return false;
 end
+
+function GetButtonMouseCoords( mousex:number, mousey:number )
+	local topLeftX, topLeftY = Controls.MinimapImage:GetScreenOffset();
+	
+	-- normalized 0-1, relative to map
+	local minix = mousex - topLeftX;
+	local miniy = mousey - topLeftY;
+	minix = minix / Controls.MinimapImage:GetSizeX();
+	miniy = miniy / Controls.MinimapImage:GetSizeY();
+
+	return minix, miniy;
+end
+function IsMouseInButton( minix:number, miniy:number )
+	return minix >= 0 and minix <= 1 and miniy >= 0 and miniy <= 1;
+end
+
 function OnInputHandler( pInputStruct:table )
   local uiMsg = pInputStruct:GetMessageType();
   if (uiMsg == KeyEvents.KeyUp) then return KeyHandler( pInputStruct:GetKey() ); end;
+
+  -- Handle purchase button events
+  local tResults  :table = CityManager.GetCommandTargets( pSelectedCity, CityCommandTypes.PURCHASE, tParameters );
+  if tResults == nil then
+    return false;
+  end
+  local tPlots  :table = tResults[CityCommandResults.PLOTS];
+  if (tPlots ~= nil and table.count(tPlots) ~= 0) then
+    for i,plotId in pairs(tPlots) do
+      local kPlot :table = Map.GetPlotByIndex(plotId);
+      local index:number = kPlot:GetIndex();
+      local pInstance:table = GetInstanceAt( index );
+      if pInstance ~= nil then
+        local minix, miniy = GetMinimapMouseCoords( pInstance.PurchaseButton, pInputStruct:GetX(), pInputStruct:GetY() );
+          -- pInstance.PurchaseButton:GetTextControl():SetColorByName("ResGoldLabelCS");
+
+  -- -- Enable drag on LMB down
+  -- if uiMsg == MouseEvents.LButtonDown then
+    -- print("ZZZ 1 Press");
+    -- CQUI_isMouseDragging = true; -- Potential drag is in process
+    -- CQUI_hasMouseDragged = false; -- There has been no actual dragging yet
+    -- -- return true; -- Consume event
+
+  -- -- Disable drag on LMB up (but only if mouse was previously dragging)
+  -- elseif uiMsg == MouseEvents.LButtonUp and CQUI_isMouseDragging then
+    -- print("ZZZ 2 Drag");
+    -- CQUI_isMouseDragging = false;
+
+  -- -- Move camera if dragging, mouse moves, and mouse is over minimap.
+  -- elseif uiMsg == MouseEvents.MouseMove and CQUI_isMouseDragging then
+    -- print("ZZZ 3 Release in InputHandler");
+    -- CQUI_hasMouseDragged = true;
+    -- -- return true
+  -- end
+
   return false;
+
 end
 
 -- ===========================================================================
